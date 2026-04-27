@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Job Tracker Settings</title>
+  <link rel="stylesheet" href="options.css" />
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <span class="logo-icon">💼</span>
+      <div>
+        <h1>Job Tracker Settings</h1>
+        <p class="subtitle">Configure AI features</p>
+      </div>
+    </header>
+
+    <section class="card">
+      <h2>Groq API Key</h2>
+      <p class="hint">
+        Get a free API key at
+        <a href="https://console.groq.com/keys" target="_blank">console.groq.com/keys</a>.
+        Your key is stored locally and never leaves your browser except to call Groq's API.
+      </p>
+      <div class="field">
+        <label for="api-key">API Key</label>
+        <div class="input-row">
+          <input type="password" id="api-key" placeholder="gsk_..." autocomplete="off" spellcheck="false" />
+          <button class="btn-toggle" id="toggle-key" title="Show/hide key">Show</button>
+        </div>
+      </div>
+      <div class="field">
+        <label for="model">Model</label>
+        <select id="model">
+          <option value="llama-3.3-70b-versatile">llama-3.3-70b-versatile (recommended)</option>
+          <option value="llama-3.1-8b-instant">llama-3.1-8b-instant (fastest)</option>
+          <option value="mixtral-8x7b-32768">mixtral-8x7b-32768</option>
+        </select>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Your Resume</h2>
+      <p class="hint">
+        Upload your resume (PDF, DOCX, or TXT). Text is extracted locally — the file itself is never sent anywhere.
+        Only the extracted text is sent to Groq when generating cover letters.
+      </p>
+
+      <!-- Upload zone -->
+      <div class="upload-zone" id="upload-zone">
+        <div class="upload-icon">📄</div>
+        <div class="upload-label">Drop your resume here or <span class="upload-link">browse</span></div>
+        <div class="upload-hint">PDF, DOCX, or TXT</div>
+        <input type="file" id="resume-file" accept=".pdf,.docx,.txt" />
+      </div>
+
+      <!-- Parsing status -->
+      <div class="parse-status" id="parse-status" style="display:none">
+        <div class="parse-spinner" id="parse-spinner" style="display:none"></div>
+        <span id="parse-msg"></span>
+      </div>
+
+      <!-- Extracted text preview (editable) -->
+      <div class="field" id="resume-field" style="display:none">
+        <div class="resume-label-row">
+          <label>Extracted Text <span class="label-note">(edit if needed)</span></label>
+          <div class="resume-meta" id="resume-meta"></div>
+        </div>
+        <textarea id="resume-text" rows="14" placeholder="Extracted resume text will appear here…"></textarea>
+        <div class="char-count" id="char-count">0 characters</div>
+      </div>
+    </section>
+
+    <div class="actions">
+      <button class="btn-save" id="save-btn">Save Settings</button>
+      <span class="save-status" id="save-status"></span>
+    </div>
+  </div>
+
+  <script src="../lib/pdf.min.js"></script>
+  <script src="../lib/mammoth.min.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>
