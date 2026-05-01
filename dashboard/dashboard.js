@@ -327,6 +327,7 @@ function openCoverLetterModal(app) {
   document.getElementById('cl-output').style.display = 'none';
   document.getElementById('cl-output').value = '';
   document.getElementById('cl-copy-btn').style.display = 'none';
+  document.getElementById('cl-download-pdf').style.display = 'none';
   document.getElementById('cl-star-btn').style.display = 'none';
   document.getElementById('cl-del-btn').style.display = 'none';
   document.getElementById('cl-add-to-lib-btn').style.display = 'none';
@@ -401,6 +402,7 @@ function selectCLVersion(versionId) {
   document.getElementById('cl-output').value = version.text;
   document.getElementById('cl-output').style.display = 'block';
   document.getElementById('cl-copy-btn').style.display = 'inline-flex';
+  document.getElementById('cl-download-pdf').style.display = 'inline-flex';
 
   const starBtn = document.getElementById('cl-star-btn');
   starBtn.style.display = 'inline-flex';
@@ -503,6 +505,7 @@ document.getElementById('cl-del-btn').addEventListener('click', () => {
     clSelectedId = null;
     document.getElementById('cl-output').style.display = 'none';
     document.getElementById('cl-copy-btn').style.display = 'none';
+    document.getElementById('cl-download-pdf').style.display = 'none';
     document.getElementById('cl-star-btn').style.display = 'none';
     document.getElementById('cl-del-btn').style.display = 'none';
     document.getElementById('cl-add-to-lib-btn').style.display = 'none';
@@ -519,6 +522,13 @@ document.getElementById('cl-copy-btn').addEventListener('click', () => {
     btn.textContent = 'Copied!';
     setTimeout(() => { btn.textContent = 'Copy'; }, 2000);
   });
+});
+
+// Download PDF — per-app modal
+document.getElementById('cl-download-pdf').addEventListener('click', () => {
+  const text = document.getElementById('cl-output').value;
+  const title = clCurrentApp ? `Cover Letter – ${clCurrentApp.role} at ${clCurrentApp.company}` : 'Cover Letter';
+  downloadCLAsPdf(text, title);
 });
 
 // Add to library from per-app CL modal
@@ -547,6 +557,103 @@ document.getElementById('settings-btn').addEventListener('click', () => {
   chrome.runtime.sendMessage({ type: 'OPEN_OPTIONS' });
 });
 
+// ── Download cover letter as PDF ──────────────────────────────────────────────
+
+function downloadCLAsPdf(text, title) {
+  if (!text) return;
+  const filename = (title || 'cover-letter').replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '-') + '.pdf';
+  const bytes = buildMinimalPdf(title || 'Cover Letter', text);
+  const blob = new Blob([bytes], { type: 'application/pdf' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 15000);
+}
+
+function buildMinimalPdf(title, body) {
+  const PW = 612, PH = 792, ML = 72, MT = 72, MB = 72;
+  const titleSz = 14, bodySz = 11, titleLH = 28, bodyLH = 18;
+
+  function sanitize(s) {
+    return s
+      .replace(/[\u2018\u2019]/g, "'").replace(/[\u201C\u201D]/g, '"')
+      .replace(/\u2013/g, '-').replace(/\u2014/g, '--').replace(/\u2026/g, '...')
+      .replace(/[^\x20-\x7E\n]/g, '');
+  }
+
+  function esc(s) {
+    return s.replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
+  }
+
+  function wordWrap(text, maxChars) {
+    const result = [];
+    for (const para of text.split('\n')) {
+      if (!para.trim()) { result.push(''); continue; }
+      const words = para.split(/\s+/);
+      let line = '';
+      for (const word of words) {
+        const candidate = line ? line + ' ' + word : word;
+        if (candidate.length > maxChars && line) { result.push(line); line = word; }
+        else line = candidate;
+      }
+      if (line) result.push(line);
+    }
+    return result;
+  }
+
+  const cleanTitle = sanitize(title);
+  const cleanBody  = sanitize(body);
+
+  // Build content stream
+  const sl = ['BT'];
+  let y = PH - MT;
+
+  sl.push(`/F2 ${titleSz} Tf`);
+  sl.push(`1 0 0 1 ${ML} ${y} Tm`);
+  sl.push(`(${esc(cleanTitle)}) Tj`);
+  y -= titleLH;
+
+  sl.push(`/F1 ${bodySz} Tf`);
+  for (const line of wordWrap(cleanBody, 78)) {
+    if (y < MB) break;
+    sl.push(`1 0 0 1 ${ML} ${y} Tm`);
+    sl.push(`(${esc(line)}) Tj`);
+    y -= bodyLH;
+  }
+  sl.push('ET');
+  const stream = sl.join('\n') + '\n';
+  const streamLen = stream.length; // all ASCII after sanitize
+
+  // Object bodies
+  const O = {};
+  O[1] = '<</Type /Catalog /Pages 2 0 R>>';
+  O[2] = '<</Type /Pages /Kids [3 0 R] /Count 1>>';
+  O[3] = `<</Type /Page /Parent 2 0 R /MediaBox [0 0 ${PW} ${PH}] /Contents 4 0 R /Resources <</Font <</F1 5 0 R /F2 6 0 R>>>>>>`;
+  O[4] = `<</Length ${streamLen}>>\nstream\n${stream}endstream`;
+  O[5] = '<</Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding>>';
+  O[6] = '<</Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding>>';
+
+  let pdf = '%PDF-1.4\n';
+  const offsets = {};
+  for (let i = 1; i <= 6; i++) {
+    offsets[i] = pdf.length;
+    pdf += `${i} 0 obj\n${O[i]}\nendobj\n`;
+  }
+
+  const xrefPos = pdf.length;
+  pdf += 'xref\n0 7\n0000000000 65535 f \n';
+  for (let i = 1; i <= 6; i++) {
+    pdf += offsets[i].toString().padStart(10, '0') + ' 00000 n \n';
+  }
+  pdf += `trailer\n<</Size 7 /Root 1 0 R>>\nstartxref\n${xrefPos}\n%%EOF`;
+
+  return new TextEncoder().encode(pdf);
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 async function init() {
@@ -560,3 +667,454 @@ async function init() {
 }
 
 init();
+
+// ── View switching ────────────────────────────────────────────────────────────
+
+let currentView = 'applications'; // 'applications' | 'resumes' | 'coverletters'
+
+function switchView(view) {
+  currentView = view;
+
+  // Nav highlight
+  document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+  if (view === 'applications') {
+    document.querySelector(`.nav-item[data-filter="${currentFilter}"]`)?.classList.add('active');
+  } else {
+    document.querySelector(`.nav-view-btn[data-view="${view}"]`)?.classList.add('active');
+  }
+
+  // Show/hide main content areas
+  const isApp = view === 'applications';
+  document.getElementById('stats-bar').style.display     = isApp ? 'flex' : 'none';
+  document.getElementById('table-wrap').style.display    = isApp ? 'block' : 'none';
+  document.querySelector('.toolbar').style.display       = isApp ? 'flex' : 'none';
+  document.getElementById('view-resumes').style.display      = view === 'resumes' ? 'flex' : 'none';
+  document.getElementById('view-coverletters').style.display = view === 'coverletters' ? 'flex' : 'none';
+
+  if (view === 'resumes')      loadResumesView();
+  if (view === 'coverletters') loadCLLibraryView();
+}
+
+document.querySelectorAll('.nav-view-btn').forEach(btn => {
+  btn.addEventListener('click', () => switchView(btn.dataset.view));
+});
+
+document.querySelectorAll('.nav-item[data-filter]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    if (currentView !== 'applications') switchView('applications');
+  });
+});
+
+// ── Resume view ───────────────────────────────────────────────────────────────
+
+let rvVersions = [];
+let rvSelectedId = null;
+
+function loadResumesView() {
+  chrome.runtime.sendMessage({ type: 'GET_RESUME_VERSIONS' }, result => {
+    rvVersions = result?.versions || [];
+    renderRVList();
+    if (rvVersions.length) selectRVVersion(rvVersions.find(v => v.isFavorite)?.id || rvVersions[0].id);
+  });
+}
+
+function renderRVList() {
+  const list = document.getElementById('rv-list-panel');
+  if (!rvVersions.length) {
+    list.innerHTML = '<div class="panel-empty">No resumes uploaded yet.</div>';
+    return;
+  }
+  list.innerHTML = rvVersions.map(v => `
+    <div class="rv-item-panel ${v.id === rvSelectedId ? 'rv-selected' : ''}" data-id="${v.id}">
+      <div class="rv-info-panel">
+        <div class="rv-name-panel">${esc(v.filename)}</div>
+        <div class="rv-date-panel">${new Date(v.createdAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}${!v.analysis ? ' · <span class="rv-unanalyzed-tag">not analyzed</span>' : ''}</div>
+      </div>
+      <div class="rv-actions-panel">
+        <button class="rv-fav-btn ${v.isFavorite ? 'rv-fav-active' : ''}" data-id="${v.id}" title="${v.isFavorite ? 'Favorited' : 'Set as favorite'}">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="${v.isFavorite ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2">
+            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+          </svg>
+        </button>
+        <button class="rv-del-btn" data-id="${v.id}" title="Delete">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  `).join('');
+}
+
+let _rvBlobUrl = null;
+
+function selectRVVersion(id) {
+  rvSelectedId = id;
+  const v = rvVersions.find(v => v.id === id);
+  renderRVList();
+  if (!v) return;
+
+  // Clean up previous blob URL
+  if (_rvBlobUrl) { URL.revokeObjectURL(_rvBlobUrl); _rvBlobUrl = null; }
+
+  const panel = document.getElementById('rv-analysis-panel');
+  const placeholder = document.getElementById('rv-placeholder');
+  const content = document.getElementById('rv-analysis-content');
+  const isPdf = v.filename?.toLowerCase().endsWith('.pdf');
+  const hasPdfData = isPdf && v._raw?.pdf;
+
+  placeholder.style.display = 'none';
+
+  if (hasPdfData) {
+    content.style.cssText = 'flex: 1; display: flex; flex-direction: column; min-height: 0;';
+    // Build blob URL
+    const binary = atob(v._raw.pdf);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    const blob = new Blob([bytes], { type: 'application/pdf' });
+    _rvBlobUrl = URL.createObjectURL(blob);
+
+    panel.classList.add('pdf-mode');
+    content.className = 'rv-pdf-layout';
+    content.innerHTML = `
+      <div class="rv-pdf-toolbar">
+        <span class="rv-pdf-filename">${esc(v.filename)}</span>
+        <div class="rv-pdf-toolbar-actions">
+          ${!v.analysis
+            ? `<button class="btn-rv-analyze" id="rv-analyze-btn">Analyze</button>`
+            : `<span class="rv-pdf-analyzed-badge">Analyzed</span>`}
+        </div>
+      </div>
+      <iframe class="rv-pdf-frame" src="${_rvBlobUrl}"></iframe>
+    `;
+    document.getElementById('rv-analyze-btn')?.addEventListener('click', () => analyzeRVVersion(v.id));
+    return;
+  }
+
+  // Non-PDF or PDF without raw data
+  panel.classList.remove('pdf-mode');
+  content.className = '';
+  content.style.cssText = 'display: block;';
+
+  if (!v.analysis) {
+    content.innerHTML = `
+      <div class="rv-no-analysis">
+        <div class="rv-no-analysis-filename">${esc(v.filename)}</div>
+        <p class="rv-no-analysis-hint">Resume uploaded. Run AI analysis to extract skills, experience, and strengths — used for cover letter generation.</p>
+        <div class="rv-no-analysis-actions">
+          <button class="btn-rv-analyze" id="rv-analyze-btn" data-id="${v.id}">Analyze Resume</button>
+        </div>
+      </div>
+    `;
+    document.getElementById('rv-analyze-btn').addEventListener('click', () => analyzeRVVersion(v.id));
+    return;
+  }
+
+  const a = v.analysis;
+  content.innerHTML = `
+    <div class="rv-analysis-header">
+      <div>
+        <div class="rv-analysis-name">${esc(a.name || 'Resume')}</div>
+        <div class="rv-analysis-meta">${esc(v.filename)} · ${v.isFavorite ? 'Favorite' : 'Not favorite'}</div>
+      </div>
+    </div>
+    ${a.summary ? `<div class="rv-analysis-summary">${esc(a.summary)}</div>` : ''}
+    ${(a.skills||[]).length ? `
+      <div class="rv-section-title">Skills</div>
+      <div class="rv-badge-row">${(a.skills||[]).map(s=>`<span class="rv-badge rv-badge-skill">${esc(s)}</span>`).join('')}</div>
+    ` : ''}
+    ${(a.strengths||[]).length ? `
+      <div class="rv-section-title">Strengths</div>
+      <div class="rv-badge-row">${(a.strengths||[]).map(s=>`<span class="rv-badge rv-badge-strength">${esc(s)}</span>`).join('')}</div>
+    ` : ''}
+    ${(a.experience||[]).length ? `
+      <div class="rv-section-title">Experience</div>
+      ${(a.experience||[]).map(e=>`
+        <div class="rv-exp-item">
+          <div class="rv-exp-role">${esc(e.role)} <span class="rv-exp-company">at ${esc(e.company)}</span></div>
+          ${(e.highlights||[]).map(h=>`<div class="rv-exp-highlight">• ${esc(h)}</div>`).join('')}
+        </div>
+      `).join('')}
+    ` : ''}
+  `;
+}
+
+
+function analyzeRVVersion(id) {
+  const v = rvVersions.find(v => v.id === id);
+  if (!v?._raw) { showRVStatus('error', 'Raw file data not available. Please re-upload.'); return; }
+
+  const content = document.getElementById('rv-analysis-content');
+  content.innerHTML = `<div class="rv-no-analysis"><div class="rv-spinner" style="display:block;margin:0 auto 12px"></div><p class="rv-no-analysis-hint">Analyzing\u2026</p></div>`;
+
+  chrome.runtime.sendMessage({ type: 'ANALYZE_RESUME', pdf: v._raw.pdf, text: v._raw.text }, response => {
+    if (response?.error) { showRVStatus('error', `Analysis failed: ${response.error}`); selectRVVersion(id); return; }
+    const idx = rvVersions.findIndex(v => v.id === id);
+    if (idx !== -1) {
+      rvVersions[idx].analysis = response.result;
+    }
+    chrome.storage.local.set({ resumeVersions: rvVersions }, () => {
+      showRVStatus('success', 'Analysis complete');
+      selectRVVersion(id);
+    });
+  });
+}
+
+// Resume list events
+document.getElementById('rv-list-panel').addEventListener('click', e => {
+  const favBtn = e.target.closest('.rv-fav-btn');
+  const delBtn = e.target.closest('.rv-del-btn');
+  const item   = e.target.closest('.rv-item-panel');
+
+  if (favBtn) {
+    e.stopPropagation();
+    const id = favBtn.dataset.id;
+    chrome.runtime.sendMessage({ type: 'SET_FAVORITE_RESUME', versionId: id }, () => {
+      rvVersions.forEach(v => { v.isFavorite = v.id === id; });
+      renderRVList();
+      selectRVVersion(id);
+    });
+    return;
+  }
+
+  if (delBtn) {
+    e.stopPropagation();
+    const id = delBtn.dataset.id;
+    if (!confirm('Delete this resume version?')) return;
+    chrome.runtime.sendMessage({ type: 'DELETE_RESUME_VERSION', versionId: id }, () => {
+      rvVersions = rvVersions.filter(v => v.id !== id);
+      if (rvVersions.length && rvVersions[0]) {
+        rvVersions[0].isFavorite = rvVersions[0].isFavorite || (rvSelectedId === id);
+      }
+      rvSelectedId = null;
+      document.getElementById('rv-placeholder').style.display = 'flex';
+      document.getElementById('rv-analysis-content').style.display = 'none';
+      renderRVList();
+      if (rvVersions.length) selectRVVersion(rvVersions.find(v=>v.isFavorite)?.id || rvVersions[0].id);
+    });
+    return;
+  }
+
+  if (item) selectRVVersion(item.dataset.id);
+});
+
+// Resume upload
+document.getElementById('rv-add-btn').addEventListener('click', () => {
+  const zone = document.getElementById('rv-upload-zone');
+  zone.style.display = zone.style.display === 'none' ? 'block' : 'none';
+});
+
+const rvFileInput = document.getElementById('rv-file-input');
+const rvUploadZone = document.getElementById('rv-upload-zone');
+
+rvUploadZone.addEventListener('dragover', e => { e.preventDefault(); rvUploadZone.classList.add('drag-over'); });
+rvUploadZone.addEventListener('dragleave', () => rvUploadZone.classList.remove('drag-over'));
+rvUploadZone.addEventListener('drop', e => { e.preventDefault(); rvUploadZone.classList.remove('drag-over'); if (e.dataTransfer?.files?.[0]) handleRVFile(e.dataTransfer.files[0]); });
+rvFileInput.addEventListener('change', () => { if (rvFileInput.files?.[0]) handleRVFile(rvFileInput.files[0]); });
+
+function showRVStatus(type, msg) {
+  const el = document.getElementById('rv-status');
+  const spinner = document.getElementById('rv-spinner');
+  const msgEl = document.getElementById('rv-status-msg');
+  el.style.display = 'flex';
+  el.className = `rv-status rv-status-${type}`;
+  spinner.style.display = type === 'loading' ? 'block' : 'none';
+  msgEl.textContent = msg;
+}
+
+async function handleRVFile(file) {
+  const ext = file.name.split('.').pop().toLowerCase();
+  if (!['pdf','docx','txt'].includes(ext)) { showRVStatus('error','Unsupported file. Use PDF, DOCX, or TXT.'); return; }
+  showRVStatus('loading', 'Reading file\u2026');
+  document.getElementById('rv-upload-zone').style.display = 'none';
+
+  try {
+    let pdf = null, text = null;
+    if (ext === 'pdf') {
+      const buf = await file.arrayBuffer();
+      const bytes = new Uint8Array(buf);
+      let bin = ''; for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+      pdf = btoa(bin);
+    } else if (ext === 'docx') {
+      const buf = await file.arrayBuffer();
+      const result = await mammoth.extractRawText({ arrayBuffer: buf });
+      text = result.value.trim();
+    } else {
+      text = await new Promise((res, rej) => { const r = new FileReader(); r.onload = e => res(e.target.result); r.onerror = rej; r.readAsText(file); });
+      text = text.trim();
+    }
+
+    const newVersion = {
+      id: crypto.randomUUID(),
+      analysis: null,
+      filename: file.name,
+      createdAt: new Date().toISOString(),
+      isFavorite: rvVersions.length === 0,
+      _raw: { pdf, text }
+    };
+    rvVersions.unshift(newVersion);
+    chrome.storage.local.set({ resumeVersions: rvVersions }, () => {
+      showRVStatus('success', `Uploaded: ${file.name}`);
+      renderRVList();
+      selectRVVersion(newVersion.id);
+    });
+  } catch(err) { showRVStatus('error', `Failed: ${err.message}`); }
+}
+
+// ── Cover Letter Library view ─────────────────────────────────────────────────
+
+let cllEntries = [];
+let cllSelectedId = null;
+
+function loadCLLibraryView() {
+  chrome.runtime.sendMessage({ type: 'GET_CL_LIBRARY' }, result => {
+    cllEntries = result?.entries || [];
+    renderCLLList();
+    if (cllEntries.length) selectCLLEntry(cllEntries.find(e => e.isFavorite)?.id || cllEntries[0].id);
+  });
+}
+
+function renderCLLList() {
+  const list = document.getElementById('cll-list');
+  if (!cllEntries.length) {
+    list.innerHTML = '<div class="panel-empty">No cover letters saved yet.</div>';
+    return;
+  }
+  list.innerHTML = cllEntries.map(e => `
+    <div class="cll-item ${e.id === cllSelectedId ? 'cll-item-active' : ''}" data-id="${e.id}">
+      <div class="cll-item-info">
+        <div class="cll-item-title">${esc(e.title)}</div>
+        <div class="cll-item-date">${new Date(e.createdAt).toLocaleDateString('en-US',{month:'short',day:'numeric'})}</div>
+      </div>
+      <div class="cll-item-actions">
+        <button class="cll-list-fav-btn ${e.isFavorite ? 'cll-list-fav-active' : ''}" data-id="${e.id}" title="${e.isFavorite ? 'Favorited' : 'Set as favorite'}">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="${e.isFavorite ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2">
+            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+          </svg>
+        </button>
+        <button class="cll-list-del-btn" data-id="${e.id}" title="Delete">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function selectCLLEntry(id) {
+  cllSelectedId = id;
+  const entry = cllEntries.find(e => e.id === id);
+  renderCLLList();
+  if (!entry) return;
+
+  document.getElementById('cll-placeholder').style.display = 'none';
+  document.getElementById('cll-editor').style.display = 'flex';
+  document.getElementById('cll-title-input').value = entry.title || '';
+  document.getElementById('cll-text-input').value  = entry.text  || '';
+  document.getElementById('cll-fav-btn').textContent = entry.isFavorite ? 'Favorited' : 'Set as Favorite';
+}
+
+document.getElementById('cll-list').addEventListener('click', e => {
+  const favBtn = e.target.closest('.cll-list-fav-btn');
+  const delBtn = e.target.closest('.cll-list-del-btn');
+  const item   = e.target.closest('.cll-item');
+
+  if (favBtn) {
+    e.stopPropagation();
+    const id = favBtn.dataset.id;
+    chrome.runtime.sendMessage({ type: 'SET_FAVORITE_CL_LIBRARY', id }, () => {
+      cllEntries.forEach(e => { e.isFavorite = e.id === id; });
+      if (cllSelectedId === id) document.getElementById('cll-fav-btn').textContent = 'Favorited';
+      renderCLLList();
+    });
+    return;
+  }
+
+  if (delBtn) {
+    e.stopPropagation();
+    const id = delBtn.dataset.id;
+    if (!confirm('Delete this cover letter?')) return;
+    chrome.runtime.sendMessage({ type: 'DELETE_CL_FROM_LIBRARY', id }, () => {
+      cllEntries = cllEntries.filter(e => e.id !== id);
+      if (cllSelectedId === id) {
+        cllSelectedId = null;
+        document.getElementById('cll-editor').style.display = 'none';
+        document.getElementById('cll-placeholder').style.display = 'flex';
+      }
+      renderCLLList();
+    });
+    return;
+  }
+
+  if (item) selectCLLEntry(item.dataset.id);
+});
+
+document.getElementById('cll-add-btn').addEventListener('click', () => {
+  cllSelectedId = null;
+  renderCLLList();
+  document.getElementById('cll-placeholder').style.display = 'none';
+  document.getElementById('cll-editor').style.display = 'flex';
+  document.getElementById('cll-title-input').value = '';
+  document.getElementById('cll-text-input').value  = '';
+  document.getElementById('cll-fav-btn').textContent = 'Set as Favorite';
+  document.getElementById('cll-title-input').focus();
+});
+
+document.getElementById('cll-save-btn').addEventListener('click', () => {
+  const title = document.getElementById('cll-title-input').value.trim() || 'Cover Letter';
+  const text  = document.getElementById('cll-text-input').value.trim();
+  if (!text) return;
+
+  if (cllSelectedId) {
+    chrome.runtime.sendMessage({ type: 'UPDATE_CL_IN_LIBRARY', id: cllSelectedId, updates: { title, text } }, () => {
+      const idx = cllEntries.findIndex(e => e.id === cllSelectedId);
+      if (idx !== -1) { cllEntries[idx].title = title; cllEntries[idx].text = text; }
+      renderCLLList();
+    });
+  } else {
+    chrome.runtime.sendMessage({ type: 'SAVE_CL_TO_LIBRARY', title, text }, result => {
+      if (result?.entry) {
+        cllEntries.unshift(result.entry);
+        cllSelectedId = result.entry.id;
+        renderCLLList();
+        document.getElementById('cll-fav-btn').textContent = result.entry.isFavorite ? 'Favorited' : 'Set as Favorite';
+      }
+    });
+  }
+});
+
+document.getElementById('cll-fav-btn').addEventListener('click', () => {
+  if (!cllSelectedId) return;
+  chrome.runtime.sendMessage({ type: 'SET_FAVORITE_CL_LIBRARY', id: cllSelectedId }, () => {
+    cllEntries.forEach(e => { e.isFavorite = e.id === cllSelectedId; });
+    document.getElementById('cll-fav-btn').textContent = 'Favorited';
+    renderCLLList();
+  });
+});
+
+document.getElementById('cll-copy-btn').addEventListener('click', () => {
+  const text = document.getElementById('cll-text-input').value;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.getElementById('cll-copy-btn');
+    btn.textContent = 'Copied!';
+    setTimeout(() => { btn.textContent = 'Copy'; }, 2000);
+  });
+});
+
+document.getElementById('cll-download-pdf').addEventListener('click', () => {
+  const text  = document.getElementById('cll-text-input').value;
+  const title = document.getElementById('cll-title-input').value.trim() || 'Cover Letter';
+  downloadCLAsPdf(text, title);
+});
+
+document.getElementById('cll-del-btn').addEventListener('click', () => {
+  if (!cllSelectedId || !confirm('Delete this cover letter?')) return;
+  chrome.runtime.sendMessage({ type: 'DELETE_CL_FROM_LIBRARY', id: cllSelectedId }, () => {
+    cllEntries = cllEntries.filter(e => e.id !== cllSelectedId);
+    cllSelectedId = null;
+    renderCLLList();
+    document.getElementById('cll-editor').style.display = 'none';
+    document.getElementById('cll-placeholder').style.display = 'flex';
+  });
+});
