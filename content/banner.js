@@ -271,6 +271,8 @@
 
   // ── Cover letter ────────────────────────────────────────────────────────────
 
+  let clLibEntries = [];
+
   function onCLClick() {
     const role     = $('jt-role').value.trim()    || 'Unknown Role';
     const company  = $('jt-company').value.trim() || 'Unknown Company';
@@ -280,11 +282,12 @@
     const clBtn    = $('jt-cl-btn');
     const regenBtn = $('jt-cl-regen');
 
-    clSec.style.display   = 'flex';
-    loading.style.display = 'flex';
-    outWrap.style.display = 'none';
-    clBtn.disabled        = true;
-    regenBtn.disabled     = true;
+    clSec.style.display              = 'flex';
+    loading.style.display            = 'flex';
+    outWrap.style.display            = 'none';
+    $('jt-cl-lib-wrap').style.display = 'none';
+    clBtn.disabled                   = true;
+    regenBtn.disabled                = true;
     setWide(true);
 
     try {
@@ -314,6 +317,28 @@
       regenBtn.disabled     = false;
       showStatus('Extension error. Reload the page.', 'error');
     }
+  }
+
+  function onCLLibClick() {
+    chrome.runtime.sendMessage({ type: 'GET_CL_LIBRARY' }, result => {
+      clLibEntries = result?.entries || [];
+      if (!clLibEntries.length) {
+        showStatus('No cover letters in library yet.', 'error');
+        return;
+      }
+
+      const sel = $('jt-cl-lib-select');
+      sel.innerHTML = '<option value="">Choose from library…</option>' +
+        clLibEntries.map(e =>
+          `<option value="${e.id}">${esc(e.title)}${e.isFavorite ? ' ★' : ''}</option>`
+        ).join('');
+
+      $('jt-cl-section').style.display   = 'flex';
+      $('jt-cl-lib-wrap').style.display  = 'block';
+      $('jt-cl-loading').style.display   = 'none';
+      $('jt-cl-out-wrap').style.display  = 'none';
+      setWide(true);
+    });
   }
 
   // ── Analyze JD ─────────────────────────────────────────────────────────────
