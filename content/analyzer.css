@@ -38,14 +38,14 @@
   width: 340px;
   height: 100vh;
   z-index: 2147483646;
-  background: #0d1526;
-  border-left: 1px solid #1e293b;
+  background: #ffffff;
+  border-left: 1px solid #e2e8f0;
   display: flex;
   flex-direction: column;
   font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
   font-size: 13px;
-  color: #e2e8f0;
-  box-shadow: -4px 0 24px rgba(0,0,0,0.4);
+  color: #1e293b;
+  box-shadow: -4px 0 24px rgba(99,102,241,0.12);
   transform: translateX(100%);
   transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   overflow: hidden;
@@ -58,8 +58,9 @@
   align-items: center;
   justify-content: space-between;
   padding: 16px 18px;
-  border-bottom: 1px solid #1e293b;
+  border-bottom: 1px solid #f1f5f9;
   flex-shrink: 0;
+  background: linear-gradient(135deg, #6366f1, #a855f7);
 }
 
 .jt-sidebar-title {
@@ -68,22 +69,22 @@
   gap: 8px;
   font-size: 14px;
   font-weight: 700;
-  color: #f1f5f9;
+  color: #ffffff;
 }
 
 .jt-close-btn {
-  background: none;
+  background: rgba(255,255,255,0.15);
   border: none;
-  color: #64748b;
+  color: #ffffff;
   font-size: 20px;
   line-height: 1;
   cursor: pointer;
   padding: 2px 4px;
   border-radius: 4px;
-  transition: color 0.15s, background 0.15s;
+  transition: background 0.15s;
 }
 
-.jt-close-btn:hover { color: #e2e8f0; background: #1e293b; }
+.jt-close-btn:hover { background: rgba(255,255,255,0.25); }
 
 .jt-sidebar-body {
   flex: 1;
@@ -93,7 +94,7 @@
   flex-direction: column;
   gap: 18px;
   scrollbar-width: thin;
-  scrollbar-color: #1e293b transparent;
+  scrollbar-color: #e2e8f0 transparent;
 }
 
 /* Loading state */
@@ -104,14 +105,14 @@
   justify-content: center;
   gap: 14px;
   height: 200px;
-  color: #64748b;
+  color: #94a3b8;
   font-size: 13px;
 }
 
 .jt-spinner {
   width: 28px;
   height: 28px;
-  border: 3px solid #1e293b;
+  border: 3px solid #e2e8f0;
   border-top-color: #6366f1;
   border-radius: 50%;
   animation: jt-spin 0.7s linear infinite;
@@ -121,17 +122,17 @@
 
 /* Error state */
 .jt-error {
-  background: #1e1020;
-  border: 1px solid #7f1d1d;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
   border-radius: 8px;
   padding: 14px;
-  color: #fca5a5;
+  color: #dc2626;
   font-size: 12px;
   line-height: 1.6;
 }
 
 .jt-error a {
-  color: #818cf8;
+  color: #6366f1;
   text-decoration: none;
 }
 
@@ -143,14 +144,14 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.07em;
-  color: #64748b;
+  color: #94a3b8;
 }
 
 .jt-summary {
   font-size: 13px;
-  color: #cbd5e1;
+  color: #64748b;
   line-height: 1.6;
-  background: #0f172a;
+  background: #f8fafc;
   border-radius: 8px;
   padding: 12px;
 }
@@ -166,23 +167,23 @@
   border-radius: 20px;
   font-size: 12px;
   font-weight: 500;
-  background: #1e293b;
-  color: #94a3b8;
+  background: #f1f5f9;
+  color: #64748b;
 }
 
 .jt-badge.required {
-  background: rgba(99, 102, 241, 0.18);
-  color: #a5b4fc;
+  background: #dbeafe;
+  color: #1d4ed8;
 }
 
 .jt-badge.nice {
-  background: rgba(52, 211, 153, 0.12);
-  color: #6ee7b7;
+  background: #ede9fe;
+  color: #7c3aed;
 }
 
 .jt-badge.topic {
-  background: rgba(251, 191, 36, 0.12);
-  color: #fcd34d;
+  background: #d1fae5;
+  color: #059669;
 }
 
 .jt-seniority {
@@ -193,16 +194,16 @@
   border-radius: 8px;
   font-size: 13px;
   font-weight: 600;
-  background: rgba(99, 102, 241, 0.15);
-  color: #a5b4fc;
-  border: 1px solid rgba(99, 102, 241, 0.25);
+  background: #ede9fe;
+  color: #7c3aed;
+  border: 1px solid #ddd6fe;
   width: fit-content;
 }
 
 .jt-footer {
   padding: 12px 18px;
-  border-top: 1px solid #1e293b;
+  border-top: 1px solid #f1f5f9;
   font-size: 11px;
-  color: #334155;
+  color: #cbd5e1;
   flex-shrink: 0;
 }

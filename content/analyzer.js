@@ -47,7 +47,7 @@
   function createButton() {
     const btn = document.createElement('button');
     btn.id = 'jt-analyze-btn';
-    btn.innerHTML = `<span class="jt-icon">✦</span> Analyze Job`;
+    btn.innerHTML = `<span class="jt-icon"></span> Analyze Job`;
     btn.addEventListener('click', onAnalyzeClick);
     document.body.appendChild(btn);
     return btn;
@@ -60,7 +60,7 @@
     sidebar.id = 'jt-sidebar';
     sidebar.innerHTML = `
       <div class="jt-sidebar-header">
-        <div class="jt-sidebar-title">✦ Job Analysis</div>
+        <div class="jt-sidebar-title">Job Analysis</div>
         <button class="jt-close-btn" id="jt-close-btn" title="Close">&times;</button>
       </div>
       <div class="jt-sidebar-body" id="jt-sidebar-body"></div>
@@ -115,7 +115,7 @@
       ${data.seniority ? `
         <div class="jt-section">
           <div class="jt-section-title">Seniority Level</div>
-          <div class="jt-seniority">⬡ ${esc(data.seniority)}</div>
+          <div class="jt-seniority">${esc(data.seniority)}</div>
         </div>` : ''}
 
       ${requiredBadges ? `
@@ -144,14 +144,27 @@
     return d.innerHTML;
   }
 
+  // ── Cache ─────────────────────────────────────────────────────────────────────
+
+  let cachedResult = null;
+  let cachedUrl = null;
+
   // ── Analyze handler ──────────────────────────────────────────────────────────
 
   async function onAnalyzeClick() {
     openSidebar();
+
+    // Return cached result if URL hasn't changed
+    if (cachedResult && cachedUrl === location.href) {
+      showResult(cachedResult);
+      return;
+    }
+
     showLoading();
 
     const jdText = extractJD();
 
+    try {
     chrome.runtime.sendMessage(
       { type: 'ANALYZE_JD', text: jdText },
       response => {
@@ -170,7 +183,7 @@
               const link = document.getElementById('jt-open-settings');
               if (link) link.addEventListener('click', e => {
                 e.preventDefault();
-                chrome.runtime.sendMessage({ type: 'OPEN_OPTIONS' });
+                chrome.runtime.sendMessage({ type: 'OPEN_OPTIONS' }, () => void chrome.runtime.lastError);
               });
             }, 50);
           } else {
@@ -178,9 +191,14 @@
           }
           return;
         }
+        cachedResult = response.result;
+        cachedUrl = location.href;
         showResult(response.result);
       }
     );
+    } catch (e) {
+      showError('Extension was updated. Please reload the page.');
+    }
   }
 
   // ── Init ─────────────────────────────────────────────────────────────────────

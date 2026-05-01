@@ -1,6 +1,7 @@
 // Dashboard script
 
 const STATUS_OPTIONS = {
+  need_to_apply: 'Need to Apply',
   applied:      'Applied',
   phone_screen: 'Phone Screen',
   interview:    'Interview',
@@ -127,7 +128,9 @@ function renderTable() {
         </div>
       </td>
       <td>
-        <button class="icon-btn cover-letter-btn" data-id="${app.id}" title="Generate Cover Letter">✦</button>
+        <button class="icon-btn cover-letter-btn ${(app.coverLetters || []).length ? 'has-cl' : ''}"
+          data-id="${app.id}"
+          title="${(app.coverLetters || []).length ? `${app.coverLetters.length} cover letter(s)` : 'Generate Cover Letter'}">CL</button>
       </td>
     </tr>
   `).join('');
@@ -310,21 +313,45 @@ document.getElementById('export-csv').addEventListener('click', () => {
 // ── Cover Letter Modal ────────────────────────────────────────────────────────
 
 let clCurrentApp = null;
+let clVersions   = [];
+let clSelectedId = null;
 
 function openCoverLetterModal(app) {
   clCurrentApp = app;
+  clVersions   = [];
+  clSelectedId = null;
 
   document.getElementById('cl-job-info').textContent = `${app.role} at ${app.company}`;
-  document.getElementById('cl-placeholder').style.display = 'block';
+  document.getElementById('cl-placeholder').style.display = 'flex';
+  document.getElementById('cl-placeholder').textContent = 'Select a version or generate a new cover letter.';
   document.getElementById('cl-output').style.display = 'none';
   document.getElementById('cl-output').value = '';
   document.getElementById('cl-copy-btn').style.display = 'none';
-  document.getElementById('cl-loading').style.display = 'none';
+  document.getElementById('cl-star-btn').style.display = 'none';
+  document.getElementById('cl-del-btn').style.display = 'none';
+  document.getElementById('cl-add-to-lib-btn').style.display = 'none';
+  document.getElementById('cl-gen-loading').style.display = 'none';
   document.getElementById('cl-generate-btn').disabled = false;
 
-  // Pre-load saved resume snippet
-  chrome.storage.local.get('resumeSnippet', result => {
-    document.getElementById('cl-resume').value = result.resumeSnippet || '';
+  // Resume status
+  chrome.runtime.sendMessage({ type: 'GET_RESUME_VERSIONS' }, result => {
+    const statusEl = document.getElementById('cl-resume-status');
+    const versions = result?.versions || [];
+    const fav = versions.find(v => v.isFavorite) || versions[0];
+    if (fav) {
+      statusEl.textContent = `Resume: ${fav.filename || 'uploaded'}`;
+      statusEl.className = 'cl-resume-status has-resume';
+    } else {
+      statusEl.textContent = 'No resume on file — go to Settings to upload one.';
+      statusEl.className = 'cl-resume-status no-resume';
+      document.getElementById('cl-generate-btn').disabled = true;
+    }
+  });
+
+  // Load saved cover letter versions
+  chrome.runtime.sendMessage({ type: 'GET_COVER_LETTERS', appId: app.id }, result => {
+    clVersions = result?.coverLetters || [];
+    renderCLVersions();
   });
 
   document.getElementById('cl-modal-overlay').style.display = 'flex';
@@ -333,62 +360,158 @@ function openCoverLetterModal(app) {
 function closeCoverLetterModal() {
   document.getElementById('cl-modal-overlay').style.display = 'none';
   clCurrentApp = null;
+  clVersions   = [];
+  clSelectedId = null;
 }
 
+function formatDateTime(iso) {
+  const d = new Date(iso);
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) +
+    ' · ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+}
+
+function renderCLVersions() {
+  const container = document.getElementById('cl-versions');
+
+  if (!clVersions.length) {
+    container.innerHTML = '<div class="cl-no-versions">No versions yet. Generate one above.</div>';
+    return;
+  }
+
+  container.innerHTML = clVersions.map(v => `
+    <div class="cl-version-item ${v.id === clSelectedId ? 'active' : ''}" data-id="${v.id}">
+      <div class="cl-version-info">
+        <div class="cl-version-date">${formatDateTime(v.createdAt)}</div>
+        <div class="cl-version-preview">${esc(v.text.slice(0, 55))}…</div>
+      </div>
+      <button class="cl-version-star ${v.isFavorite ? 'starred' : ''}"
+        data-id="${v.id}" title="${v.isFavorite ? 'Favorited' : 'Set as favorite'}">
+        ${v.isFavorite ? 'Saved' : 'Save'}
+      </button>
+    </div>
+  `).join('');
+}
+
+function selectCLVersion(versionId) {
+  clSelectedId = versionId;
+  const version = clVersions.find(v => v.id === versionId);
+  if (!version) return;
+
+  document.getElementById('cl-placeholder').style.display = 'none';
+  document.getElementById('cl-output').value = version.text;
+  document.getElementById('cl-output').style.display = 'block';
+  document.getElementById('cl-copy-btn').style.display = 'inline-flex';
+
+  const starBtn = document.getElementById('cl-star-btn');
+  starBtn.style.display = 'inline-flex';
+  starBtn.textContent   = version.isFavorite ? 'Saved' : 'Save';
+  starBtn.title         = version.isFavorite ? 'Favorited' : 'Set as favorite';
+
+  document.getElementById('cl-del-btn').style.display = 'inline-flex';
+  document.getElementById('cl-add-to-lib-btn').style.display = 'inline-flex';
+
+  renderCLVersions();
+}
+
+// Events — modal close
 document.getElementById('cl-modal-close').addEventListener('click', closeCoverLetterModal);
 document.getElementById('cl-modal-overlay').addEventListener('click', e => {
   if (e.target === e.currentTarget) closeCoverLetterModal();
 });
 
-document.getElementById('cl-generate-btn').addEventListener('click', async () => {
+// Generate new version
+document.getElementById('cl-generate-btn').addEventListener('click', () => {
   if (!clCurrentApp) return;
-
-  const resume = document.getElementById('cl-resume').value.trim();
-  if (!resume) {
-    document.getElementById('cl-resume').focus();
-    return;
-  }
-
-  // Save resume for next time
-  chrome.storage.local.set({ resumeSnippet: resume });
-
-  document.getElementById('cl-generate-btn').disabled = true;
-  document.getElementById('cl-placeholder').style.display = 'none';
-  document.getElementById('cl-output').style.display = 'none';
-  document.getElementById('cl-copy-btn').style.display = 'none';
-  document.getElementById('cl-loading').style.display = 'flex';
+  const genBtn = document.getElementById('cl-generate-btn');
+  genBtn.disabled = true;
+  document.getElementById('cl-gen-loading').style.display = 'flex';
 
   chrome.runtime.sendMessage(
-    {
-      type: 'GENERATE_COVER_LETTER',
-      company: clCurrentApp.company,
-      role: clCurrentApp.role,
-      resume
-    },
+    { type: 'GENERATE_COVER_LETTER', company: clCurrentApp.company, role: clCurrentApp.role, appId: clCurrentApp.id },
     response => {
-      document.getElementById('cl-loading').style.display = 'none';
-      document.getElementById('cl-generate-btn').disabled = false;
+      genBtn.disabled = false;
+      document.getElementById('cl-gen-loading').style.display = 'none';
 
-      if (response.error) {
+      if (response?.error) {
+        const ph = document.getElementById('cl-placeholder');
         if (response.error === 'NO_API_KEY') {
-          document.getElementById('cl-placeholder').textContent =
-            'No Groq API key set. Open Settings (⚙ in the sidebar) to add one.';
-          document.getElementById('cl-placeholder').style.display = 'block';
+          ph.textContent = 'No Groq API key set. Open Settings (⚙ in the sidebar) to add one.';
+        } else if (response.error === 'NO_RESUME') {
+          ph.textContent = 'No resume on file. Go to Settings to upload one.';
         } else {
-          document.getElementById('cl-placeholder').textContent = `Error: ${response.error}`;
-          document.getElementById('cl-placeholder').style.display = 'block';
+          ph.textContent = `Error: ${response.error}`;
         }
+        ph.style.display = 'flex';
+        document.getElementById('cl-output').style.display = 'none';
         return;
       }
 
-      const output = document.getElementById('cl-output');
-      output.value = response.letter;
-      output.style.display = 'block';
-      document.getElementById('cl-copy-btn').style.display = 'inline-flex';
+      // Reload versions from storage then select the newest
+      chrome.runtime.sendMessage({ type: 'GET_COVER_LETTERS', appId: clCurrentApp.id }, result => {
+        clVersions = result?.coverLetters || [];
+        // Also update the in-memory app object
+        const appIdx = allApplications.findIndex(a => a.id === clCurrentApp.id);
+        if (appIdx !== -1) allApplications[appIdx].coverLetters = clVersions;
+        renderCLVersions();
+        if (clVersions.length) selectCLVersion(clVersions[0].id);
+      });
     }
   );
 });
 
+// Version list — click to select, click star to favorite
+document.getElementById('cl-versions').addEventListener('click', e => {
+  const starBtn    = e.target.closest('.cl-version-star');
+  const versionItem = e.target.closest('.cl-version-item');
+
+  if (starBtn) {
+    e.stopPropagation();
+    const id = starBtn.dataset.id;
+    chrome.runtime.sendMessage({ type: 'SET_FAVORITE_CL', appId: clCurrentApp.id, versionId: id }, () => {
+      clVersions.forEach(v => { v.isFavorite = v.id === id; });
+      if (clSelectedId === id) {
+        document.getElementById('cl-star-btn').textContent = 'Saved';
+      }
+      renderCLVersions();
+    });
+    return;
+  }
+
+  if (versionItem) selectCLVersion(versionItem.dataset.id);
+});
+
+// Star button in right panel
+document.getElementById('cl-star-btn').addEventListener('click', () => {
+  if (!clSelectedId || !clCurrentApp) return;
+  chrome.runtime.sendMessage({ type: 'SET_FAVORITE_CL', appId: clCurrentApp.id, versionId: clSelectedId }, () => {
+    clVersions.forEach(v => { v.isFavorite = v.id === clSelectedId; });
+    document.getElementById('cl-star-btn').textContent = 'Saved';
+    document.getElementById('cl-star-btn').title = 'Favorited';
+    renderCLVersions();
+  });
+});
+
+// Delete button in right panel
+document.getElementById('cl-del-btn').addEventListener('click', () => {
+  if (!clSelectedId || !clCurrentApp) return;
+  if (!confirm('Delete this cover letter version?')) return;
+
+  chrome.runtime.sendMessage({ type: 'DELETE_COVER_LETTER', appId: clCurrentApp.id, versionId: clSelectedId }, () => {
+    clVersions = clVersions.filter(v => v.id !== clSelectedId);
+    const appIdx = allApplications.findIndex(a => a.id === clCurrentApp.id);
+    if (appIdx !== -1) allApplications[appIdx].coverLetters = clVersions;
+    clSelectedId = null;
+    document.getElementById('cl-output').style.display = 'none';
+    document.getElementById('cl-copy-btn').style.display = 'none';
+    document.getElementById('cl-star-btn').style.display = 'none';
+    document.getElementById('cl-del-btn').style.display = 'none';
+    document.getElementById('cl-add-to-lib-btn').style.display = 'none';
+    document.getElementById('cl-placeholder').style.display = 'flex';
+    renderCLVersions();
+  });
+});
+
+// Copy button
 document.getElementById('cl-copy-btn').addEventListener('click', () => {
   const text = document.getElementById('cl-output').value;
   navigator.clipboard.writeText(text).then(() => {
@@ -398,7 +521,19 @@ document.getElementById('cl-copy-btn').addEventListener('click', () => {
   });
 });
 
-// Wire up cover letter buttons via table delegation (added in renderTable)
+// Add to library from per-app CL modal
+document.getElementById('cl-add-to-lib-btn').addEventListener('click', () => {
+  const text = document.getElementById('cl-output').value;
+  if (!text || !clCurrentApp) return;
+  const title = `${clCurrentApp.role} at ${clCurrentApp.company}`;
+  chrome.runtime.sendMessage({ type: 'SAVE_CL_TO_LIBRARY', title, text }, () => {
+    const btn = document.getElementById('cl-add-to-lib-btn');
+    btn.textContent = 'Saved!';
+    setTimeout(() => { btn.textContent = 'Save to Library'; }, 2000);
+  });
+});
+
+// Wire up cover letter buttons via table delegation
 document.getElementById('table-body').addEventListener('click', e => {
   const clBtn = e.target.closest('.cover-letter-btn');
   if (clBtn) {

@@ -1,8 +1,3 @@
-// Set pdf.js worker path to the local extension file
-if (typeof pdfjsLib !== 'undefined') {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = chrome.runtime.getURL('lib/pdf.worker.min.js');
-}
-
 const apiKeyInput  = document.getElementById('api-key');
 const toggleBtn    = document.getElementById('toggle-key');
 const modelSelect  = document.getElementById('model');
@@ -11,28 +6,47 @@ const fileInput    = document.getElementById('resume-file');
 const parseStatus  = document.getElementById('parse-status');
 const parseSpinner = document.getElementById('parse-spinner');
 const parseMsg     = document.getElementById('parse-msg');
-const resumeField  = document.getElementById('resume-field');
-const resumeText   = document.getElementById('resume-text');
-const resumeMeta   = document.getElementById('resume-meta');
-const charCount    = document.getElementById('char-count');
+const resumeAnalysisEl = document.getElementById('resume-analysis');
 const saveBtn      = document.getElementById('save-btn');
 const saveStatus   = document.getElementById('save-status');
 
+// ── Resume version state ──────────────────────────────────────────────────────
+
+let resumeVersions = [];
+let selectedVersionId = null;
+
 // ── Load saved settings ───────────────────────────────────────────────────────
 
-chrome.storage.local.get(['groqApiKey', 'groqModel', 'resumeSnippet', 'resumeFileName'], result => {
-  if (result.groqApiKey) apiKeyInput.value = result.groqApiKey;
-  if (result.groqModel)  modelSelect.value = result.groqModel;
-  if (result.resumeSnippet) {
-    resumeText.value = result.resumeSnippet;
-    resumeField.style.display = 'block';
-    if (result.resumeFileName) {
-      showStatus('success', `Loaded: ${result.resumeFileName}`);
-      resumeMeta.textContent = result.resumeFileName;
+chrome.storage.local.get(
+  ['groqApiKey', 'groqModel', 'resumeVersions', 'resumeAnalysis', 'resumeFileName'],
+  result => {
+    if (result.groqApiKey) apiKeyInput.value = result.groqApiKey;
+    if (result.groqModel)  modelSelect.value = result.groqModel;
+
+    // Migrate legacy single-resume storage
+    let versions = result.resumeVersions || [];
+    if (!versions.length && result.resumeAnalysis) {
+      versions = [{
+        id: crypto.randomUUID(),
+        analysis: result.resumeAnalysis,
+        filename: result.resumeFileName || 'resume',
+        createdAt: new Date().toISOString(),
+        isFavorite: true
+      }];
+      chrome.storage.local.set({ resumeVersions: versions });
+      chrome.storage.local.remove(['resumeAnalysis', 'resumeFileName']);
     }
-    updateCharCount();
+
+    resumeVersions = versions;
+    if (versions.length) {
+      uploadZone.style.display = 'none';
+      renderResumeVersions();
+      // Show analysis for the favorite (or first)
+      const fav = versions.find(v => v.isFavorite) || versions[0];
+      selectVersion(fav.id);
+    }
   }
-});
+);
 
 // ── API key toggle ────────────────────────────────────────────────────────────
 
@@ -62,6 +76,14 @@ fileInput.addEventListener('change', () => {
   if (fileInput.files?.[0]) handleFile(fileInput.files[0]);
 });
 
+document.getElementById('add-resume-btn')?.addEventListener('click', () => {
+  uploadZone.style.display = 'flex';
+  document.getElementById('resume-versions-section').style.display = 'none';
+  resumeAnalysisEl.style.display = 'none';
+  parseStatus.style.display = 'none';
+  fileInput.value = '';
+});
+
 async function handleFile(file) {
   const ext = file.name.split('.').pop().toLowerCase();
   const allowed = ['pdf', 'docx', 'txt'];
@@ -71,74 +93,196 @@ async function handleFile(file) {
     return;
   }
 
-  showStatus('loading', `Extracting text from ${file.name}…`);
-  resumeField.style.display = 'none';
+  showStatus('loading', 'Analyzing resume…');
+  uploadZone.style.display = 'none';
+  resumeAnalysisEl.style.display = 'none';
 
   try {
-    let text = '';
-    if (ext === 'pdf')  text = await extractPDF(file);
-    if (ext === 'docx') text = await extractDOCX(file);
-    if (ext === 'txt')  text = await extractTXT(file);
+    let pdf = null;
+    let text = null;
 
-    text = text.trim();
-    if (!text) {
-      showStatus('error', 'No text could be extracted. The file may be image-based or encrypted.');
+    if (ext === 'pdf') {
+      const arrayBuffer = await file.arrayBuffer();
+      const bytes = new Uint8Array(arrayBuffer);
+      let binary = '';
+      for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+      pdf = btoa(binary);
+    } else if (ext === 'docx') {
+      const arrayBuffer = await file.arrayBuffer();
+      const result = await mammoth.extractRawText({ arrayBuffer });
+      text = result.value.trim();
+    } else {
+      text = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload  = e => resolve(e.target.result);
+        reader.onerror = () => reject(new Error('Could not read file'));
+        reader.readAsText(file);
+      });
+      text = text.trim();
+    }
+
+    if (!pdf && !text) {
+      showStatus('error', 'No content could be extracted from the file.');
+      uploadZone.style.display = 'flex';
       return;
     }
 
-    resumeText.value = text;
-    resumeMeta.textContent = `${file.name} · ${text.length.toLocaleString()} chars`;
-    resumeField.style.display = 'block';
-    updateCharCount();
-    showStatus('success', `Extracted ${text.length.toLocaleString()} characters from ${file.name}`);
+    chrome.runtime.sendMessage({ type: 'ANALYZE_RESUME', pdf, text }, response => {
+      if (chrome.runtime.lastError || !response) {
+        showStatus('error', 'Extension error. Try reloading.');
+        uploadZone.style.display = 'flex';
+        return;
+      }
+      if (response.error) {
+        showStatus('error', `Analysis failed: ${response.error}`);
+        uploadZone.style.display = 'flex';
+        return;
+      }
 
-    // Store the filename for display on next load
-    chrome.storage.local.set({ resumeFileName: file.name });
+      const analysis = response.result;
+      const newVersion = {
+        id: crypto.randomUUID(),
+        analysis,
+        filename: file.name,
+        createdAt: new Date().toISOString(),
+        isFavorite: resumeVersions.length === 0  // first upload = auto-favorite
+      };
+
+      resumeVersions.unshift(newVersion);
+      chrome.storage.local.set({ resumeVersions }, () => {
+        showStatus('success', `Resume analyzed: ${file.name}`);
+        renderResumeVersions();
+        selectVersion(newVersion.id);
+      });
+    });
+
   } catch (err) {
-    showStatus('error', `Extraction failed: ${err.message}`);
+    showStatus('error', `Failed: ${err.message}`);
+    uploadZone.style.display = 'flex';
   }
 }
 
-// ── Extractors ────────────────────────────────────────────────────────────────
+// ── Version list ──────────────────────────────────────────────────────────────
 
-async function extractPDF(file) {
-  const arrayBuffer = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-  const pages = [];
+function renderResumeVersions() {
+  const section = document.getElementById('resume-versions-section');
+  const list    = document.getElementById('rv-list');
 
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i);
-    const content = await page.getTextContent();
-    const pageText = content.items
-      .map(item => item.str)
-      .join(' ')
-      .replace(/\s{2,}/g, ' ');
-    pages.push(pageText);
+  if (!resumeVersions.length) {
+    section.style.display = 'none';
+    return;
   }
 
-  return pages.join('\n\n');
+  section.style.display = 'block';
+
+  list.innerHTML = resumeVersions.map(v => `
+    <div class="rv-item ${v.id === selectedVersionId ? 'rv-selected' : ''}" data-id="${v.id}">
+      <div class="rv-info">
+        <div class="rv-name">${esc(v.filename)}</div>
+        <div class="rv-date">${formatDate(v.createdAt)}</div>
+      </div>
+      <div class="rv-actions">
+        <button class="rv-star ${v.isFavorite ? 'rv-star-active' : ''}"
+          data-id="${v.id}" title="${v.isFavorite ? 'Favorite (used for cover letters)' : 'Set as favorite'}">
+          ${v.isFavorite ? 'Saved' : 'Save'}
+        </button>
+        <button class="rv-delete" data-id="${v.id}" title="Delete this version">×</button>
+      </div>
+    </div>
+  `).join('');
 }
 
-async function extractDOCX(file) {
-  const arrayBuffer = await file.arrayBuffer();
-  const result = await mammoth.extractRawText({ arrayBuffer });
-  return result.value;
+function selectVersion(versionId) {
+  selectedVersionId = versionId;
+  const version = resumeVersions.find(v => v.id === versionId);
+  if (!version) return;
+
+  renderResumeVersions(); // update active highlight
+  showAnalysis(version.analysis, version.filename);
 }
 
-async function extractTXT(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload  = e => resolve(e.target.result);
-    reader.onerror = () => reject(new Error('Could not read file'));
-    reader.readAsText(file);
-  });
+// Version list click delegation
+document.getElementById('rv-list')?.addEventListener('click', e => {
+  const starBtn   = e.target.closest('.rv-star');
+  const deleteBtn = e.target.closest('.rv-delete');
+  const item      = e.target.closest('.rv-item');
+
+  if (starBtn) {
+    e.stopPropagation();
+    const id = starBtn.dataset.id;
+    resumeVersions.forEach(v => { v.isFavorite = v.id === id; });
+    chrome.storage.local.set({ resumeVersions }, () => renderResumeVersions());
+    return;
+  }
+
+  if (deleteBtn) {
+    e.stopPropagation();
+    const id = deleteBtn.dataset.id;
+    if (resumeVersions.length === 1) {
+      if (!confirm('Delete your only resume? You will need to upload a new one to use cover letter generation.')) return;
+    } else {
+      if (!confirm('Delete this resume version?')) return;
+    }
+    const wasFavorite = resumeVersions.find(v => v.id === id)?.isFavorite;
+    resumeVersions = resumeVersions.filter(v => v.id !== id);
+    // Promote first remaining to favorite if the deleted one was the favorite
+    if (wasFavorite && resumeVersions.length) resumeVersions[0].isFavorite = true;
+    chrome.storage.local.set({ resumeVersions }, () => {
+      if (!resumeVersions.length) {
+        document.getElementById('resume-versions-section').style.display = 'none';
+        resumeAnalysisEl.style.display = 'none';
+        uploadZone.style.display = 'flex';
+        selectedVersionId = null;
+      } else {
+        const next = id === selectedVersionId
+          ? (resumeVersions.find(v => v.isFavorite) || resumeVersions[0])
+          : resumeVersions.find(v => v.id === selectedVersionId) || resumeVersions[0];
+        selectedVersionId = next.id;
+        renderResumeVersions();
+        showAnalysis(next.analysis, next.filename);
+      }
+    });
+    return;
+  }
+
+  if (item) selectVersion(item.dataset.id);
+});
+
+// ── Analysis display ──────────────────────────────────────────────────────────
+
+function showAnalysis(analysis, filename) {
+  document.getElementById('resume-versions-section').style.display = 'block';
+  resumeAnalysisEl.style.display = 'block';
+
+  document.getElementById('analysis-name').textContent = analysis.name || 'Resume';
+  document.getElementById('analysis-meta').textContent = filename || '';
+  document.getElementById('analysis-summary').textContent = analysis.summary || '';
+
+  const skillsEl = document.getElementById('analysis-skills');
+  skillsEl.innerHTML = (analysis.skills || [])
+    .map(s => `<span class="badge skill-badge">${esc(s)}</span>`).join('');
+
+  const expEl = document.getElementById('analysis-experience');
+  expEl.innerHTML = (analysis.experience || []).map(e => `
+    <div class="exp-item">
+      <div class="exp-role">${esc(e.role)} <span class="exp-company">at ${esc(e.company)}</span></div>
+      ${(e.highlights || []).map(h => `<div class="exp-highlight">• ${esc(h)}</div>`).join('')}
+    </div>
+  `).join('');
+
+  const strengthsEl = document.getElementById('analysis-strengths');
+  strengthsEl.innerHTML = (analysis.strengths || [])
+    .map(s => `<span class="badge strength-badge">${esc(s)}</span>`).join('');
 }
 
-// ── Char count ────────────────────────────────────────────────────────────────
+function esc(str) {
+  const d = document.createElement('div');
+  d.textContent = String(str || '');
+  return d.innerHTML;
+}
 
-resumeText.addEventListener('input', updateCharCount);
-function updateCharCount() {
-  charCount.textContent = `${resumeText.value.length.toLocaleString()} characters`;
+function formatDate(iso) {
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 // ── Status helpers ────────────────────────────────────────────────────────────
@@ -161,9 +305,8 @@ saveBtn.addEventListener('click', () => {
 
   saveBtn.disabled = true;
   chrome.storage.local.set({
-    groqApiKey:    key,
-    groqModel:     modelSelect.value,
-    resumeSnippet: resumeText.value.trim()
+    groqApiKey: key,
+    groqModel:  modelSelect.value
   }, () => {
     saveBtn.disabled = false;
     saveStatus.textContent = 'Saved!';

@@ -9,7 +9,7 @@
 <body>
   <div class="container">
     <header class="header">
-      <span class="logo-icon">💼</span>
+      <span class="logo-icon">JT</span>
       <div>
         <h1>Job Tracker Settings</h1>
         <p class="subtitle">Configure AI features</p>
@@ -21,7 +21,7 @@
       <p class="hint">
         Get a free API key at
         <a href="https://console.groq.com/keys" target="_blank">console.groq.com/keys</a>.
-        Your key is stored locally and never leaves your browser except to call Groq's API.
+        Used for job description analysis and cover letter generation.
       </p>
       <div class="field">
         <label for="api-key">API Key</label>
@@ -41,34 +41,60 @@
     </section>
 
     <section class="card">
-      <h2>Your Resume</h2>
+      <h2>Your Resumes</h2>
       <p class="hint">
-        Upload your resume (PDF, DOCX, or TXT). Text is extracted locally — the file itself is never sent anywhere.
-        Only the extracted text is sent to Groq when generating cover letters.
+        Upload your resume (PDF, DOCX, or TXT). Each upload is analyzed by AI and saved as a separate version.
+        Star a version to set it as the <strong>favorite</strong> — it will be used for cover letter generation.
       </p>
 
       <!-- Upload zone -->
       <div class="upload-zone" id="upload-zone">
-        <div class="upload-icon">📄</div>
+        <div class="upload-icon">+</div>
         <div class="upload-label">Drop your resume here or <span class="upload-link">browse</span></div>
-        <div class="upload-hint">PDF, DOCX, or TXT</div>
+        <div class="upload-hint">PDF, DOCX, or TXT · Adds a new version</div>
         <input type="file" id="resume-file" accept=".pdf,.docx,.txt" />
       </div>
 
-      <!-- Parsing status -->
+      <!-- Parsing / analysis status -->
       <div class="parse-status" id="parse-status" style="display:none">
         <div class="parse-spinner" id="parse-spinner" style="display:none"></div>
         <span id="parse-msg"></span>
       </div>
 
-      <!-- Extracted text preview (editable) -->
-      <div class="field" id="resume-field" style="display:none">
-        <div class="resume-label-row">
-          <label>Extracted Text <span class="label-note">(edit if needed)</span></label>
-          <div class="resume-meta" id="resume-meta"></div>
+      <!-- Resume version list -->
+      <div id="resume-versions-section" style="display:none">
+        <div class="rv-list-header">
+          <span class="rv-list-title">Saved Versions</span>
+          <button class="btn-add-resume" id="add-resume-btn">+ Add New</button>
         </div>
-        <textarea id="resume-text" rows="14" placeholder="Extracted resume text will appear here…"></textarea>
-        <div class="char-count" id="char-count">0 characters</div>
+        <div class="rv-list" id="rv-list"></div>
+      </div>
+
+      <!-- Structured analysis display (for selected version) -->
+      <div id="resume-analysis" style="display:none">
+        <div class="analysis-header">
+          <div>
+            <div class="analysis-name" id="analysis-name"></div>
+            <div class="analysis-meta" id="analysis-meta"></div>
+          </div>
+        </div>
+
+        <div class="analysis-summary" id="analysis-summary"></div>
+
+        <div class="analysis-section" id="skills-section">
+          <div class="analysis-section-title">Skills</div>
+          <div class="badge-row" id="analysis-skills"></div>
+        </div>
+
+        <div class="analysis-section" id="experience-section">
+          <div class="analysis-section-title">Experience</div>
+          <div id="analysis-experience"></div>
+        </div>
+
+        <div class="analysis-section" id="strengths-section">
+          <div class="analysis-section-title">Strengths</div>
+          <div class="badge-row" id="analysis-strengths"></div>
+        </div>
       </div>
     </section>
 
@@ -78,7 +104,6 @@
     </div>
   </div>
 
-  <script src="../lib/pdf.min.js"></script>
   <script src="../lib/mammoth.min.js"></script>
   <script src="options.js"></script>
 </body>

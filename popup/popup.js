@@ -1,6 +1,7 @@
 // Popup script
 
 const STATUS_LABELS = {
+  need_to_apply: 'Need to Apply',
   applied: 'Applied',
   phone_screen: 'Phone Screen',
   interview: 'Interview',
@@ -35,14 +36,19 @@ function renderJobs(applications) {
     return;
   }
 
+  const statusOptions = Object.entries(STATUS_LABELS)
+    .map(([v, l]) => `<option value="${v}">${l}</option>`).join('');
+
   list.innerHTML = recent.map(app => `
-    <div class="job-item" data-status="${app.status}">
+    <div class="job-item" data-status="${app.status}" data-id="${app.id}">
       <div class="job-role">${escapeHtml(app.role)}</div>
       <div class="job-meta">
         <span class="job-company">${escapeHtml(app.company)}</span>
         <span class="job-date">${formatDate(app.appliedAt)}</span>
       </div>
-      <span class="platform-badge">${app.platform}</span>
+      <select class="job-status-select status-${app.status}" data-id="${app.id}">
+        ${statusOptions.replace(`value="${app.status}"`, `value="${app.status}" selected`)}
+      </select>
     </div>
   `).join('');
 }
@@ -81,5 +87,22 @@ chrome.runtime.sendMessage({ type: 'GET_APPLICATIONS' }, response => {
   renderJobs(apps);
 });
 
+document.getElementById('job-list').addEventListener('change', e => {
+  const sel = e.target.closest('.job-status-select');
+  if (!sel) return;
+  const id = sel.dataset.id;
+  const status = sel.value;
+  sel.className = `job-status-select status-${status}`;
+  sel.closest('.job-item').dataset.status = status;
+  chrome.runtime.sendMessage({ type: 'UPDATE_APPLICATION', id, data: { status } }, () => void chrome.runtime.lastError);
+});
+
 document.getElementById('open-dashboard').addEventListener('click', openDashboard);
 document.getElementById('add-manual').addEventListener('click', openAddModal);
+
+document.getElementById('show-banner').addEventListener('click', () => {
+  chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
+    if (tab?.id) chrome.tabs.sendMessage(tab.id, { type: 'FORCE_BANNER' }, () => void chrome.runtime.lastError);
+    window.close();
+  });
+});

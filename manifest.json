@@ -2,8 +2,14 @@
   "manifest_version": 3,
   "name": "Job Application Tracker",
   "version": "1.1.0",
-  "description": "Automatically track job applications across LinkedIn, Greenhouse, Workday, Lever, and more. Includes AI-powered job description analysis and cover letter generation.",
-  "permissions": ["storage", "tabs", "notifications"],
+  "description": "Track job applications with AI-powered job description analysis and cover letter generation.",
+  "permissions": ["storage", "tabs"],
+  "commands": {
+    "show-banner": {
+      "suggested_key": { "default": "Alt+Shift+J" },
+      "description": "Show Job Tracker banner on this page"
+    }
+  },
   "host_permissions": ["https://*/*"],
   "options_page": "options/options.html",
   "background": {
@@ -19,49 +25,41 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://www.linkedin.com/*"],
-      "js": ["content/linkedin_page.js"],
-      "run_at": "document_start",
-      "world": "MAIN"
-    },
-    {
-      "matches": ["https://www.linkedin.com/*"],
-      "js": ["content/linkedin.js"],
-      "run_at": "document_idle"
-    },
-    {
-      "matches": [
-        "https://boards.greenhouse.io/*",
-        "https://*.greenhouse.io/*"
-      ],
-      "js": ["content/greenhouse.js"],
-      "run_at": "document_idle"
-    },
-    {
-      "matches": ["https://*.myworkdayjobs.com/*"],
-      "js": ["content/workday.js"],
-      "run_at": "document_idle"
-    },
-    {
-      "matches": ["https://jobs.lever.co/*"],
-      "js": ["content/lever.js"],
-      "run_at": "document_idle"
-    },
-    {
-      "matches": ["https://jobs.ashbyhq.com/*"],
-      "js": ["content/ashby.js"],
-      "run_at": "document_idle"
-    },
-    {
       "matches": ["https://*/*"],
       "exclude_matches": [
         "https://mail.google.com/*",
         "https://outlook.live.com/*",
         "https://outlook.office.com/*",
+        "https://outlook.office365.com/*",
         "https://mail.yahoo.com/*",
-        "https://mail.proton.me/*"
+        "https://mail.proton.me/*",
+        "https://proton.me/*",
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*",
+        "https://claude.ai/*",
+        "https://gemini.google.com/*",
+        "https://bard.google.com/*",
+        "https://google.com/*",
+        "https://www.google.com/*",
+        "https://youtube.com/*",
+        "https://www.youtube.com/*",
+        "https://twitter.com/*",
+        "https://x.com/*",
+        "https://facebook.com/*",
+        "https://www.facebook.com/*",
+        "https://instagram.com/*",
+        "https://www.instagram.com/*",
+        "https://reddit.com/*",
+        "https://www.reddit.com/*",
+        "https://github.com/*",
+        "https://notion.so/*",
+        "https://www.notion.so/*",
+        "https://docs.google.com/*",
+        "https://drive.google.com/*",
+        "https://calendar.google.com/*"
       ],
-      "js": ["content/generic.js"],
+      "js": ["content/banner.js"],
+      "css": ["content/banner.css"],
       "run_at": "document_idle"
     },
     {
