@@ -89,10 +89,6 @@
     {
       "resources": ["content/analyzer.css"],
       "matches": ["<all_urls>"]
-    },
-    {
-      "resources": ["lib/pdf.worker.min.js"],
-      "matches": ["<all_urls>"]
     }
   ]
 }
