@@ -61,19 +61,6 @@
       "js": ["content/banner.js"],
       "css": ["content/banner.css"],
       "run_at": "document_idle"
-    },
-    {
-      "matches": [
-        "https://www.linkedin.com/jobs/*",
-        "https://boards.greenhouse.io/*",
-        "https://*.greenhouse.io/*",
-        "https://*.myworkdayjobs.com/*",
-        "https://jobs.lever.co/*",
-        "https://jobs.ashbyhq.com/*"
-      ],
-      "js": ["content/analyzer.js"],
-      "css": ["content/analyzer.css"],
-      "run_at": "document_idle"
     }
   ],
   "icons": {
@@ -84,10 +71,6 @@
   "web_accessible_resources": [
     {
       "resources": ["dashboard/dashboard.html"],
-      "matches": ["<all_urls>"]
-    },
-    {
-      "resources": ["content/analyzer.css"],
       "matches": ["<all_urls>"]
     }
   ]

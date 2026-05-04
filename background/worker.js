@@ -5,7 +5,9 @@
 
 async function getCFConfig() {
   const r = await chrome.storage.local.get(['cfWorkerUrl', 'cfToken']);
-  return { url: r.cfWorkerUrl || '', token: r.cfToken || '' };
+  let url = r.cfWorkerUrl || '';
+  if (url && !url.startsWith('http://') && !url.startsWith('https://')) url = 'https://' + url;
+  return { url, token: r.cfToken || '' };
 }
 
 // ── Cover Letter Library ──────────────────────────────────────────────────────

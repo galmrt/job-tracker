@@ -452,7 +452,7 @@
           <div class="jt-btn-row">
             <button class="jt-btn jt-btn-secondary" id="jt-cl-btn">Generate CL</button>
             <button class="jt-btn jt-btn-secondary" id="jt-cl-lib-btn">From Library</button>
-            <button class="jt-btn jt-btn-secondary" id="jt-analyze-btn">Analyze</button>
+            <button class="jt-btn jt-btn-secondary" id="jt-analyze-btn">Analyze Job</button>
           </div>
         </div>
 
