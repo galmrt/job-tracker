@@ -450,7 +450,8 @@
         <div class="jt-banner-actions">
           <button class="jt-btn jt-btn-primary" id="jt-add-btn">+ Add to Dashboard</button>
           <div class="jt-btn-row">
-            <button class="jt-btn jt-btn-secondary" id="jt-cl-btn">Cover Letter</button>
+            <button class="jt-btn jt-btn-secondary" id="jt-cl-btn">Generate CL</button>
+            <button class="jt-btn jt-btn-secondary" id="jt-cl-lib-btn">From Library</button>
             <button class="jt-btn jt-btn-secondary" id="jt-analyze-btn">Analyze</button>
           </div>
         </div>
@@ -477,6 +478,11 @@
           <div class="jt-section-header">
             <span class="jt-section-title">Cover Letter</span>
             <button class="jt-section-close" id="jt-cl-close">×</button>
+          </div>
+          <div class="jt-cl-lib-wrap" id="jt-cl-lib-wrap" style="display:none">
+            <select class="jt-input jt-cl-lib-select" id="jt-cl-lib-select">
+              <option value="">Choose from library…</option>
+            </select>
           </div>
           <div class="jt-cl-loading" id="jt-cl-loading">
             <div class="jt-spinner"></div>
@@ -543,24 +549,27 @@
     });
   }
 
-  // ── Init ────────────────────────────────────────────────────────────────────
+  // ── Event wiring (shared between normal inject and FORCE_BANNER) ────────────
 
-  function injectBanner() {
-    if (!isJobPage())   return;
-    if ($('jt-banner')) return;
-
-    buildBanner();
-
-    // Drag to move
+  function attachEvents() {
     makeDraggable($('jt-banner'), $('jt-tab'));
 
-    // Events
     $('jt-expand').addEventListener('click', e => { e.stopPropagation(); toggleWide(); });
     $('jt-tab').addEventListener('click', toggleBanner);
     $('jt-add-btn').addEventListener('click', onAddClick);
     $('jt-cl-btn').addEventListener('click', onCLClick);
+    $('jt-cl-lib-btn').addEventListener('click', onCLLibClick);
     $('jt-analyze-btn').addEventListener('click', onAnalyzeClick);
     $('jt-cl-regen').addEventListener('click', onCLClick);
+
+    $('jt-cl-lib-select').addEventListener('change', () => {
+      const sel   = $('jt-cl-lib-select');
+      const entry = clLibEntries.find(e => e.id === sel.value);
+      if (!entry) return;
+      $('jt-cl-out').value          = entry.text;
+      $('jt-cl-out-wrap').style.display = 'flex';
+    });
+
     $('jt-analyze-close').addEventListener('click', () => {
       $('jt-analyze-section').style.display = 'none';
     });
@@ -575,11 +584,9 @@
         data: { status: $('jt-status-select').value }
       }, () => void chrome.runtime.lastError);
     });
-
     $('jt-dashboard-btn').addEventListener('click', () => {
       chrome.runtime.sendMessage({ type: 'OPEN_DASHBOARD' }, () => void chrome.runtime.lastError);
     });
-
     $('jt-cl-copy').addEventListener('click', () => {
       navigator.clipboard.writeText($('jt-cl-out').value).then(() => {
         const b = $('jt-cl-copy');
@@ -587,9 +594,16 @@
         setTimeout(() => { b.textContent = 'Copy'; }, 2000);
       });
     });
+  }
 
-    // Auto-expand and populate fields (with retry for SPA pages)
-    expanded = true; // start expanded
+  // ── Init ────────────────────────────────────────────────────────────────────
+
+  function injectBanner() {
+    if (!isJobPage())   return;
+    if ($('jt-banner')) return;
+    buildBanner();
+    attachEvents();
+    expanded = true;
     tryFillFields();
   }
 
@@ -609,30 +623,9 @@
 
   chrome.runtime.onMessage.addListener(msg => {
     if (msg.type === 'FORCE_BANNER') {
-      if ($('jt-banner')) return; // already visible
+      if ($('jt-banner')) return;
       buildBanner();
-      makeDraggable($('jt-banner'), $('jt-tab'));
-      $('jt-expand').addEventListener('click', e => { e.stopPropagation(); toggleWide(); });
-      $('jt-tab').addEventListener('click', toggleBanner);
-      $('jt-add-btn').addEventListener('click', onAddClick);
-      $('jt-cl-btn').addEventListener('click', onCLClick);
-      $('jt-analyze-btn').addEventListener('click', onAnalyzeClick);
-      $('jt-cl-regen').addEventListener('click', onCLClick);
-      $('jt-analyze-close').addEventListener('click', () => { $('jt-analyze-section').style.display = 'none'; });
-      $('jt-cl-close').addEventListener('click', () => { $('jt-cl-section').style.display = 'none'; });
-      $('jt-cl-copy').addEventListener('click', () => {
-        navigator.clipboard.writeText($('jt-cl-out').value).then(() => {
-          const b = $('jt-cl-copy'); b.textContent = 'Copied!';
-          setTimeout(() => { b.textContent = 'Copy'; }, 2000);
-        });
-      });
-      $('jt-status-select').addEventListener('change', () => {
-        if (!savedAppId) return;
-        chrome.runtime.sendMessage({ type: 'UPDATE_APPLICATION', id: savedAppId, data: { status: $('jt-status-select').value } }, () => void chrome.runtime.lastError);
-      });
-      $('jt-dashboard-btn').addEventListener('click', () => {
-        chrome.runtime.sendMessage({ type: 'OPEN_DASHBOARD' }, () => void chrome.runtime.lastError);
-      });
+      attachEvents();
       expanded = true;
       tryFillFields();
     }

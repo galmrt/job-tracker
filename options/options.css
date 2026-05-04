@@ -92,6 +92,7 @@ label {
 
 input[type="password"],
 input[type="text"],
+input[type="url"],
 select,
 textarea {
   width: 100%;
@@ -108,8 +109,12 @@ textarea {
 
 input[type="password"]:focus,
 input[type="text"]:focus,
+input[type="url"]:focus,
 select:focus,
 textarea:focus { border-color: #6366f1; }
+
+.optional { font-size: 12px; font-weight: 400; color: #94a3b8; }
+.hint code { font-size: 11px; background: #f1f5f9; border-radius: 4px; padding: 1px 5px; color: #475569; }
 
 textarea { resize: vertical; line-height: 1.65; }
 

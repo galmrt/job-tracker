@@ -2,9 +2,11 @@
 // Handles messages from content scripts and manages storage
 
 // ── Cloudflare Worker config ──────────────────────────────────────────────────
-// After deploying cloudflare/worker.js, replace these values:
-const CF_WORKER_URL = 'https://job-tracker-analyzer.marat-gal.workers.dev';
-const CF_TOKEN = 'a24c8610ec7b2bd979e4cae1a0134db86c539501389fcbd0348fbc8bfb111413'; // must match EXTENSION_TOKEN secret in CF
+
+async function getCFConfig() {
+  const r = await chrome.storage.local.get(['cfWorkerUrl', 'cfToken']);
+  return { url: r.cfWorkerUrl || '', token: r.cfToken || '' };
+}
 
 // ── Cover Letter Library ──────────────────────────────────────────────────────
 
@@ -375,12 +377,15 @@ ${jdText}`
 // ── ANALYZE_RESUME ────────────────────────────────────────────────────────────
 
 async function analyzeResume(pdf, text) {
+  const { url, token } = await getCFConfig();
+  if (!url || !token) return { error: 'CF_NOT_CONFIGURED' };
+
   try {
-    const res = await fetch(CF_WORKER_URL, {
+    const res = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Token': CF_TOKEN
+        'X-Token': token
       },
       body: JSON.stringify({ pdf, text })
     });

@@ -848,7 +848,12 @@ function analyzeRVVersion(id) {
   content.innerHTML = `<div class="rv-no-analysis"><div class="rv-spinner" style="display:block;margin:0 auto 12px"></div><p class="rv-no-analysis-hint">Analyzing\u2026</p></div>`;
 
   chrome.runtime.sendMessage({ type: 'ANALYZE_RESUME', pdf: v._raw.pdf, text: v._raw.text }, response => {
-    if (response?.error) { showRVStatus('error', `Analysis failed: ${response.error}`); selectRVVersion(id); return; }
+    if (response?.error) {
+      const msg = response.error === 'CF_NOT_CONFIGURED'
+        ? 'Cloudflare Worker not configured. Add the Worker URL and token in Settings.'
+        : `Analysis failed: ${response.error}`;
+      showRVStatus('error', msg); selectRVVersion(id); return;
+    }
     const idx = rvVersions.findIndex(v => v.id === id);
     if (idx !== -1) {
       rvVersions[idx].analysis = response.result;

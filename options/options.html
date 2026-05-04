@@ -41,6 +41,24 @@
     </section>
 
     <section class="card">
+      <h2>Cloudflare Worker <span class="optional">(Resume Analysis)</span></h2>
+      <p class="hint">
+        Deploy <code>cloudflare/worker.js</code> to your Cloudflare account, then paste the Worker URL and the <code>EXTENSION_TOKEN</code> secret you set.
+      </p>
+      <div class="field">
+        <label for="cf-url">Worker URL</label>
+        <input type="url" id="cf-url" placeholder="https://your-worker.workers.dev" autocomplete="off" spellcheck="false" />
+      </div>
+      <div class="field">
+        <label for="cf-token">Token</label>
+        <div class="input-row">
+          <input type="password" id="cf-token" placeholder="your EXTENSION_TOKEN" autocomplete="off" spellcheck="false" />
+          <button class="btn-toggle" id="toggle-cf-token" title="Show/hide token">Show</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
       <h2>Resumes</h2>
       <p class="hint">Manage your resumes in the <strong>Dashboard &rarr; Resumes</strong> tab. Upload, version, and set a favorite resume for cover letter generation.</p>
     </section>
