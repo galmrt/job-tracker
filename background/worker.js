@@ -10,6 +10,32 @@ async function getCFConfig() {
   return { url, token: r.cfToken || '' };
 }
 
+// ── Links ─────────────────────────────────────────────────────────────────────
+
+async function getLinks() {
+  const r = await chrome.storage.local.get('links');
+  return r.links || [];
+}
+
+async function saveLink(label, url) {
+  const links = await getLinks();
+  const link = { id: crypto.randomUUID(), label, url };
+  links.push(link);
+  await chrome.storage.local.set({ links });
+  return link;
+}
+
+async function updateLink(id, updates) {
+  const links = await getLinks();
+  const idx = links.findIndex(l => l.id === id);
+  if (idx !== -1) { links[idx] = { ...links[idx], ...updates }; await chrome.storage.local.set({ links }); }
+}
+
+async function deleteLink(id) {
+  const links = await getLinks();
+  await chrome.storage.local.set({ links: links.filter(l => l.id !== id) });
+}
+
 // ── Cover Letter Library ──────────────────────────────────────────────────────
 
 async function getCLLibrary() {
@@ -136,6 +162,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   if (message.type === 'SET_FAVORITE_CL_LIBRARY') {
     setFavoriteCLLibrary(message.id).then(() => sendResponse({ success: true })).catch(noop);
+    return true;
+  }
+  if (message.type === 'GET_LINKS') {
+    getLinks().then(links => sendResponse({ links })).catch(noop);
+    return true;
+  }
+  if (message.type === 'SAVE_LINK') {
+    saveLink(message.label, message.url).then(link => sendResponse({ link })).catch(noop);
+    return true;
+  }
+  if (message.type === 'UPDATE_LINK') {
+    updateLink(message.id, message.updates).then(() => sendResponse({ success: true })).catch(noop);
+    return true;
+  }
+  if (message.type === 'DELETE_LINK') {
+    deleteLink(message.id).then(() => sendResponse({ success: true })).catch(noop);
     return true;
   }
   if (message.type === 'OPEN_OPTIONS') {

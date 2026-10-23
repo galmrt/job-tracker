@@ -63,6 +63,10 @@
           <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
           Cover Letters
         </button>
+        <button class="nav-item nav-view-btn" data-view="links">
+          <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
+          My Links
+        </button>
       </nav>
 
       <div class="sidebar-footer">
@@ -175,6 +179,34 @@
               <button class="btn-download-pdf" id="cll-download-pdf">Download PDF</button>
               <button class="btn-fav-cll" id="cll-fav-btn">Set as Favorite</button>
               <button class="btn-del-cl cll-del-btn" id="cll-del-btn">Delete</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Links panel -->
+      <div id="view-links" class="side-panel" style="display:none">
+        <div class="panel-left">
+          <div class="panel-left-header">
+            <span class="panel-title">My Links</span>
+            <button class="btn-panel-action" id="links-add-btn">+ Add Link</button>
+          </div>
+          <div class="links-list" id="links-list"></div>
+        </div>
+        <div class="panel-right">
+          <div class="panel-placeholder" id="links-placeholder">Select a link to edit, or add a new one.</div>
+          <div id="links-editor" style="display:none" class="links-editor">
+            <div class="form-row">
+              <label>Label</label>
+              <input type="text" id="links-label-input" placeholder="e.g. LinkedIn, GitHub, Portfolio" />
+            </div>
+            <div class="form-row">
+              <label>URL</label>
+              <input type="url" id="links-url-input" placeholder="https://..." />
+            </div>
+            <div class="links-editor-actions">
+              <button class="btn-save cll-save-btn" id="links-save-btn">Save</button>
+              <button class="btn-copy" id="links-open-btn">Open</button>
+              <button class="btn-del-cl" id="links-del-btn">Delete</button>
             </div>
           </div>
         </div>

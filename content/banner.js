@@ -231,6 +231,30 @@
     }
   }
 
+  // ── Links ───────────────────────────────────────────────────────────────────
+
+  function onLinksClick() {
+    const section = $('jt-links-section');
+    const list    = $('jt-links-list');
+
+    section.style.display = 'flex';
+    setWide(true);
+
+    chrome.runtime.sendMessage({ type: 'GET_LINKS' }, result => {
+      const links = result?.links || [];
+      if (!links.length) {
+        list.innerHTML = '<div class="jt-links-empty">No links saved yet. Add them in Dashboard → My Links.</div>';
+        return;
+      }
+      list.innerHTML = links.map(l => `
+        <div class="jt-link-row">
+          <span class="jt-link-label">${esc(l.label)}</span>
+          <button class="jt-link-copy jt-btn jt-btn-ghost" data-url="${esc(l.url)}">Copy</button>
+        </div>
+      `).join('');
+    });
+  }
+
   // ── Add to dashboard ────────────────────────────────────────────────────────
 
   function onAddClick() {
@@ -454,11 +478,23 @@
             <button class="jt-btn jt-btn-secondary" id="jt-cl-lib-btn">From Library</button>
             <button class="jt-btn jt-btn-secondary" id="jt-analyze-btn">Analyze Job</button>
           </div>
+          <div class="jt-btn-row">
+            <button class="jt-btn jt-btn-secondary" id="jt-links-btn">My Links</button>
+          </div>
         </div>
 
         <div class="jt-banner-status" id="jt-status"></div>
 
         <button class="jt-btn jt-btn-ghost jt-btn-dashboard" id="jt-dashboard-btn">Dashboard</button>
+
+        <!-- Links -->
+        <div class="jt-analyze-section" id="jt-links-section">
+          <div class="jt-section-header">
+            <span class="jt-section-title">My Links</span>
+            <button class="jt-section-close" id="jt-links-close">×</button>
+          </div>
+          <div class="jt-links-list" id="jt-links-list"></div>
+        </div>
 
         <!-- Analyze results -->
         <div class="jt-analyze-section" id="jt-analyze-section">
@@ -575,6 +611,18 @@
     });
     $('jt-cl-close').addEventListener('click', () => {
       $('jt-cl-section').style.display = 'none';
+    });
+    $('jt-links-btn').addEventListener('click', onLinksClick);
+    $('jt-links-close').addEventListener('click', () => {
+      $('jt-links-section').style.display = 'none';
+    });
+    $('jt-links-list').addEventListener('click', e => {
+      const btn = e.target.closest('.jt-link-copy');
+      if (!btn) return;
+      navigator.clipboard.writeText(btn.dataset.url).then(() => {
+        btn.textContent = 'Copied!';
+        setTimeout(() => { btn.textContent = 'Copy'; }, 2000);
+      });
     });
     $('jt-status-select').addEventListener('change', () => {
       if (!savedAppId) return;

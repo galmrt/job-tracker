@@ -353,6 +353,7 @@ function openCoverLetterModal(app) {
   chrome.runtime.sendMessage({ type: 'GET_COVER_LETTERS', appId: app.id }, result => {
     clVersions = result?.coverLetters || [];
     renderCLVersions();
+    if (clVersions.length) selectCLVersion(clVersions.find(v => v.isFavorite)?.id || clVersions[0].id);
   });
 
   document.getElementById('cl-modal-overlay').style.display = 'flex';
@@ -688,11 +689,13 @@ function switchView(view) {
   document.getElementById('stats-bar').style.display     = isApp ? 'flex' : 'none';
   document.getElementById('table-wrap').style.display    = isApp ? 'block' : 'none';
   document.querySelector('.toolbar').style.display       = isApp ? 'flex' : 'none';
-  document.getElementById('view-resumes').style.display      = view === 'resumes' ? 'flex' : 'none';
+  document.getElementById('view-resumes').style.display      = view === 'resumes'      ? 'flex' : 'none';
   document.getElementById('view-coverletters').style.display = view === 'coverletters' ? 'flex' : 'none';
+  document.getElementById('view-links').style.display        = view === 'links'        ? 'flex' : 'none';
 
   if (view === 'resumes')      loadResumesView();
   if (view === 'coverletters') loadCLLibraryView();
+  if (view === 'links')        loadLinksView();
 }
 
 document.querySelectorAll('.nav-view-btn').forEach(btn => {
@@ -1121,5 +1124,108 @@ document.getElementById('cll-del-btn').addEventListener('click', () => {
     renderCLLList();
     document.getElementById('cll-editor').style.display = 'none';
     document.getElementById('cll-placeholder').style.display = 'flex';
+  });
+});
+
+// ── Links ─────────────────────────────────────────────────────────────────────
+
+let linkEntries  = [];
+let linkSelected = null;
+
+function loadLinksView() {
+  chrome.runtime.sendMessage({ type: 'GET_LINKS' }, result => {
+    linkEntries = result?.links || [];
+    renderLinksList();
+    if (linkEntries.length) selectLink(linkEntries[0].id);
+  });
+}
+
+function renderLinksList() {
+  const list = document.getElementById('links-list');
+  if (!linkEntries.length) {
+    list.innerHTML = '<div class="links-empty">No links yet. Add your LinkedIn, GitHub, or portfolio.</div>';
+    return;
+  }
+  list.innerHTML = linkEntries.map(l => `
+    <div class="links-item ${l.id === linkSelected ? 'active' : ''}" data-id="${l.id}">
+      <span class="links-item-icon">${linkIcon(l.url)}</span>
+      <div class="links-item-info">
+        <div class="links-item-label">${esc(l.label)}</div>
+        <div class="links-item-url">${esc(l.url)}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function linkIcon(url) {
+  if (/linkedin\.com/i.test(url))  return '💼';
+  if (/github\.com/i.test(url))    return '🐙';
+  if (/twitter\.com|x\.com/i.test(url)) return '𝕏';
+  if (/notion\.so/i.test(url))     return '📝';
+  return '🔗';
+}
+
+function selectLink(id) {
+  linkSelected = id;
+  const link = linkEntries.find(l => l.id === id);
+  if (!link) return;
+  renderLinksList();
+  document.getElementById('links-placeholder').style.display = 'none';
+  document.getElementById('links-editor').style.display = 'flex';
+  document.getElementById('links-label-input').value = link.label;
+  document.getElementById('links-url-input').value   = link.url;
+}
+
+function clearLinksEditor() {
+  linkSelected = null;
+  document.getElementById('links-label-input').value = '';
+  document.getElementById('links-url-input').value   = '';
+  document.getElementById('links-editor').style.display = 'flex';
+  document.getElementById('links-placeholder').style.display = 'none';
+  renderLinksList();
+  document.getElementById('links-label-input').focus();
+}
+
+document.getElementById('links-add-btn').addEventListener('click', clearLinksEditor);
+
+document.getElementById('links-list').addEventListener('click', e => {
+  const item = e.target.closest('.links-item');
+  if (item) selectLink(item.dataset.id);
+});
+
+document.getElementById('links-save-btn').addEventListener('click', () => {
+  const label = document.getElementById('links-label-input').value.trim();
+  const url   = document.getElementById('links-url-input').value.trim();
+  if (!label || !url) return;
+
+  if (linkSelected) {
+    chrome.runtime.sendMessage({ type: 'UPDATE_LINK', id: linkSelected, updates: { label, url } }, () => {
+      const idx = linkEntries.findIndex(l => l.id === linkSelected);
+      if (idx !== -1) linkEntries[idx] = { ...linkEntries[idx], label, url };
+      renderLinksList();
+    });
+  } else {
+    chrome.runtime.sendMessage({ type: 'SAVE_LINK', label, url }, result => {
+      if (result?.link) {
+        linkEntries.push(result.link);
+        selectLink(result.link.id);
+      }
+    });
+  }
+});
+
+document.getElementById('links-open-btn').addEventListener('click', () => {
+  const url = document.getElementById('links-url-input').value.trim();
+  if (url) window.open(url, '_blank');
+});
+
+document.getElementById('links-del-btn').addEventListener('click', () => {
+  if (!linkSelected || !confirm('Delete this link?')) return;
+  chrome.runtime.sendMessage({ type: 'DELETE_LINK', id: linkSelected }, () => {
+    linkEntries = linkEntries.filter(l => l.id !== linkSelected);
+    linkSelected = null;
+    renderLinksList();
+    document.getElementById('links-editor').style.display = 'none';
+    document.getElementById('links-placeholder').style.display = 'flex';
   });
 });
