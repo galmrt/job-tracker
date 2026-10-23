@@ -6,7 +6,7 @@
   "permissions": ["storage", "tabs"],
   "commands": {
     "show-banner": {
-      "suggested_key": { "default": "Alt+Shift+J" },
+      "suggested_key": { "default": "Ctrl+Shift+E", "mac": "Command+Shift+E" },
       "description": "Show Job Tracker banner on this page"
     }
   },
