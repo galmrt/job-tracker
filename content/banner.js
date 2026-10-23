@@ -671,7 +671,11 @@
 
   chrome.runtime.onMessage.addListener(msg => {
     if (msg.type === 'FORCE_BANNER') {
-      if ($('jt-banner')) return;
+      const existing = $('jt-banner');
+      if (existing) {
+        existing.remove();
+        return;
+      }
       buildBanner();
       attachEvents();
       expanded = true;
